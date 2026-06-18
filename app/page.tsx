@@ -204,6 +204,8 @@ export default function Home() {
     const el = imgElements.get(entry.id)
     if (!el) return
 
+    const VIDEO_DURATION = 5 // sempre 5 segundos
+
     const canvas = document.createElement('canvas')
     canvas.width = el.naturalWidth
     canvas.height = el.naturalHeight
@@ -221,7 +223,6 @@ export default function Home() {
 
     const canvasStream = canvas.captureStream(25)
 
-    let audioDuration = 5
     let audioTrack: MediaStreamTrack | null = null
 
     if (entry.audioSrc) {
@@ -230,7 +231,6 @@ export default function Home() {
         const res = await fetch(entry.audioSrc)
         const buf = await res.arrayBuffer()
         const decoded = await audioCtx.decodeAudioData(buf)
-        audioDuration = decoded.duration
 
         const dest = audioCtx.createMediaStreamDestination()
         const source = audioCtx.createBufferSource()
@@ -265,7 +265,7 @@ export default function Home() {
     }
 
     recorder.start()
-    setTimeout(() => recorder.stop(), audioDuration * 1000)
+    setTimeout(() => recorder.stop(), VIDEO_DURATION * 1000) // sempre 5s
   }, [])
 
   // ── GLOBAL PASTE ──────────────────────────────────────────────────────
