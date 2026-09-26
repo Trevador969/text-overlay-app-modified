@@ -1,98 +1,245 @@
 .strip {
   display: flex;
   align-items: center;
+
   gap: 8px;
-  padding: 10px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+
+  padding:
+    10px 16px;
+
+  background:
+    var(--surface);
+
+  border-bottom:
+    1px solid var(--border);
+
   overflow-x: auto;
+
   min-height: 80px;
+
   flex-shrink: 0;
 }
 
 .thumb {
   position: relative;
+
   width: 56px;
   height: 56px;
+
   border-radius: 8px;
+
   overflow: hidden;
+
   cursor: pointer;
-  border: 2px solid var(--border);
+
+  border:
+    2px solid var(--border);
+
   flex-shrink: 0;
-  transition: border-color 0.15s, transform 0.1s;
+
+  transition:
+    border-color 0.15s,
+    transform 0.1s;
 }
-.thumb:hover { border-color: var(--border2); transform: scale(1.04); }
-.thumb.active { border-color: var(--accent); }
+
+.thumb:hover {
+  border-color:
+    var(--border2);
+
+  transform:
+    scale(1.04);
+}
+
+.thumb.active {
+  border-color:
+    var(--accent);
+}
 
 .thumbImg {
   width: 100%;
   height: 100%;
+
   object-fit: cover;
+
   display: block;
+
+  background: #000;
 }
 
 .thumbIndex {
   position: absolute;
+
   bottom: 2px;
   left: 4px;
+
   font-size: 10px;
   font-weight: 700;
+
   color: #fff;
-  text-shadow: 0 1px 3px #000;
+
+  text-shadow:
+    0 1px 3px #000;
+
   pointer-events: none;
 }
 
 .thumbLayers {
   position: absolute;
+
   top: 2px;
   right: 2px;
-  background: var(--accent);
+
+  background:
+    var(--accent);
+
   color: #fff;
+
   font-size: 9px;
   font-weight: 700;
+
   width: 14px;
   height: 14px;
+
   border-radius: 50%;
+
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.videoBadge {
+  position: absolute;
+
+  left: 50%;
+  top: 50%;
+
+  transform:
+    translate(-50%,
+      -50%);
+
+  width: 24px;
+  height: 24px;
+
+  border-radius: 50%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background:
+    rgba(0,
+      0,
+      0,
+      0.72);
+
+  color: #fff;
+
+  font-size: 10px;
+
+  pointer-events: none;
 }
 
 .thumbRemove {
   position: absolute;
+
   top: 2px;
   left: 2px;
-  background: rgba(0,0,0,0.6);
+
+  background:
+    rgba(0,
+      0,
+      0,
+      0.65);
+
   color: #fff;
+
   font-size: 9px;
+
   width: 14px;
   height: 14px;
+
   border-radius: 50%;
+
   display: none;
   align-items: center;
   justify-content: center;
+
   border: none;
+
   cursor: pointer;
-  transition: background 0.15s;
+
+  transition:
+    background 0.15s;
 }
-.thumbRemove:hover { background: var(--accent); }
-.thumb:hover .thumbRemove { display: flex; }
+
+.thumbRemove:hover {
+  background:
+    var(--accent);
+}
+
+.thumb:hover .thumbRemove {
+  display: flex;
+}
 
 .addBtn {
   width: 56px;
   height: 56px;
+
   border-radius: 8px;
-  border: 2px dashed var(--border2);
+
+  border:
+    2px dashed var(--border2);
+
   display: flex;
   flex-direction: column;
+
   align-items: center;
   justify-content: center;
+
   cursor: pointer;
+
   flex-shrink: 0;
-  transition: border-color 0.15s, background 0.15s;
+
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+
   gap: 2px;
 }
-.addBtn:hover { border-color: var(--accent); background: rgba(255,45,85,0.06); }
 
-.addIcon { font-size: 20px; color: var(--muted); line-height: 1; font-weight: 300; }
-.addLabel { font-size: 9px; color: var(--muted2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.addBtn:hover {
+  border-color:
+    var(--accent);
+
+  background:
+    rgba(255,
+      45,
+      85,
+      0.06);
+}
+
+.addIcon {
+  font-size: 20px;
+
+  color:
+    var(--muted);
+
+  line-height: 1;
+
+  font-weight: 300;
+}
+
+.addLabel {
+  font-size: 9px;
+
+  color:
+    var(--muted2);
+
+  font-weight: 600;
+
+  text-transform:
+    uppercase;
+
+  letter-spacing:
+    0.5px;
+}

@@ -1,354 +1,2276 @@
 'use client'
-import React, { useState, useCallback, useRef, useEffect } from 'react'
-import type { ImageEntry, TextLayer, ImageAdjust } from '@/lib/types'
-import { makeLayer, makeImageId, defaultAdjust } from '@/lib/defaults'
-import { exportCanvas } from '@/lib/canvas'
+
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+} from 'react'
+
+import type {
+  ImageEntry,
+  TextLayer,
+  ImageAdjust,
+} from '@/lib/types'
+
+import {
+  makeLayer,
+  makeImageId,
+  defaultAdjust,
+} from '@/lib/defaults'
+
+import {
+  exportCanvas,
+  buildFilter,
+  drawLayer,
+} from '@/lib/canvas'
+
 import ImageStrip from '@/components/ImageStrip'
 import CanvasEditor from '@/components/CanvasEditor'
 import Sidebar from '@/components/Sidebar'
 import DropZone from '@/components/DropZone'
+
 import styles from './page.module.css'
 
-const imgElements = new Map<string, HTMLImageElement>()
+type MediaElement =
+  | HTMLImageElement
+  | HTMLVideoElement
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((res, rej) => {
-    const el = new Image()
-    el.onload = () => res(el)
-    el.onerror = rej
-    el.src = src
-  })
+/*
+==============================================================
+CACHE DOS ELEMENTOS
+==============================================================
+*/
+
+const mediaElements =
+  new Map<
+    string,
+    MediaElement
+  >()
+
+/*
+==============================================================
+CARREGAR IMAGEM
+==============================================================
+*/
+
+function loadImage(
+  src: string
+): Promise<HTMLImageElement> {
+  return new Promise(
+    (
+      resolve,
+      reject
+    ) => {
+      const image =
+        new Image()
+
+      image.onload =
+        () =>
+          resolve(
+            image
+          )
+
+      image.onerror =
+        reject
+
+      image.src =
+        src
+    }
+  )
 }
 
+/*
+==============================================================
+CARREGAR VÍDEO
+==============================================================
+*/
+
+function loadVideo(
+  src: string
+): Promise<HTMLVideoElement> {
+  return new Promise(
+    (
+      resolve,
+      reject
+    ) => {
+      const video =
+        document.createElement(
+          'video'
+        )
+
+      video.preload =
+        'metadata'
+
+      video.playsInline =
+        true
+
+      video.muted =
+        true
+
+      video.loop =
+        true
+
+      video.onloadedmetadata =
+        () => {
+          resolve(
+            video
+          )
+        }
+
+      video.onerror =
+        () => {
+          reject(
+            new Error(
+              'Não foi possível carregar o vídeo.'
+            )
+          )
+        }
+
+      video.src =
+        src
+
+      video.load()
+    }
+  )
+}
+
+/*
+==============================================================
+NOME SEM EXTENSÃO
+==============================================================
+*/
+
+function removeExtension(
+  name: string
+) {
+  return name.replace(
+    /\.[^.]+$/,
+    ''
+  )
+}
+
+/*
+==============================================================
+DOWNLOAD
+==============================================================
+*/
+
+function downloadBlob(
+  blob: Blob,
+  filename: string
+) {
+  const url =
+    URL.createObjectURL(
+      blob
+    )
+
+  const link =
+    document.createElement(
+      'a'
+    )
+
+  link.href =
+    url
+
+  link.download =
+    filename
+
+  document.body.appendChild(
+    link
+  )
+
+  link.click()
+
+  link.remove()
+
+  setTimeout(
+    () => {
+      URL.revokeObjectURL(
+        url
+      )
+    },
+    10000
+  )
+}
+
+/*
+==============================================================
+HOME
+==============================================================
+*/
+
 export default function Home() {
-  const [images, setImages] = useState<ImageEntry[]>([])
-  const [activeImageId, setActiveImageId] = useState<string | null>(null)
+  const [
+    images,
+    setImages,
+  ] =
+    useState<
+      ImageEntry[]
+    >([])
 
-  const activeEntry = images.find(i => i.id === activeImageId) ?? null
-  const activeImgEl = activeImageId ? (imgElements.get(activeImageId) ?? null) : null
+  const [
+    activeImageId,
+    setActiveImageId,
+  ] =
+    useState<
+      string | null
+    >(null)
 
-  // ── ADD IMAGES ────────────────────────────────────────────────────────
-  const handleFiles = useCallback(async (files: FileList) => {
-    const arr = Array.from(files).filter(f => f.type.startsWith('image/'))
-    if (!arr.length) return
+  const activeEntry =
+    images.find(
+      item =>
+        item.id ===
+        activeImageId
+    ) ?? null
 
-    const newEntries: ImageEntry[] = []
-    for (const file of arr) {
-      const src = await new Promise<string>(res => {
-        const r = new FileReader()
-        r.onload = e => res(e.target!.result as string)
-        r.readAsDataURL(file)
-      })
-      const el = await loadImage(src)
-      const id = makeImageId()
-      imgElements.set(id, el)
-      newEntries.push({
-        id,
-        name: file.name,
-        src,
-        width: el.naturalWidth,
-        height: el.naturalHeight,
-        layers: [makeLayer({ x: 0.5, y: 0.72 })],
-        activeLayerId: null,
-        adjust: defaultAdjust(),
-        audioSrc: null,
-        audioName: null,
-      })
-    }
+  const activeMediaEl =
+    activeImageId
+      ? (
+        mediaElements.get(
+          activeImageId
+        ) ?? null
+      )
+      : null
 
-    setImages(prev => {
-      const next = [...prev, ...newEntries]
-      return next
-    })
-    setActiveImageId(newEntries[0].id)
-  }, [])
+  /*
+  ============================================================
+  ADICIONAR IMAGENS / VÍDEOS
+  ============================================================
+  */
 
-  // ── REMOVE IMAGE ──────────────────────────────────────────────────────
-  const handleRemoveImage = useCallback((id: string) => {
-    imgElements.delete(id)
-    setImages(prev => {
-      const next = prev.filter(i => i.id !== id)
-      if (activeImageId === id) {
-        setActiveImageId(next.length ? next[next.length - 1].id : null)
-      }
-      return next
-    })
-  }, [activeImageId])
+  const handleFiles =
+    useCallback(
+      async (
+        files: FileList
+      ) => {
+        const validFiles =
+          Array.from(
+            files
+          ).filter(
+            file =>
+              file.type.startsWith(
+                'image/'
+              ) ||
+              file.type.startsWith(
+                'video/'
+              )
+          )
 
-  // ── UPDATE IMAGE ENTRY ────────────────────────────────────────────────
-  const updateEntry = useCallback((id: string, fn: (e: ImageEntry) => ImageEntry) => {
-    setImages(prev => prev.map(img => img.id === id ? fn(img) : img))
-  }, [])
+        if (
+          !validFiles.length
+        ) {
+          return
+        }
 
-  // ── LAYER OPS ─────────────────────────────────────────────────────────
-  const addLayer = useCallback((layer: TextLayer) => {
-    if (!activeImageId) return
-    updateEntry(activeImageId, e => ({
-      ...e,
-      layers: [...e.layers, layer],
-      activeLayerId: layer.id,
-    }))
-  }, [activeImageId, updateEntry])
+        const newEntries:
+          ImageEntry[] =
+          []
 
-  const updateLayer = useCallback((layerId: string, patch: Partial<TextLayer>) => {
-    if (!activeImageId) return
-    updateEntry(activeImageId, e => ({
-      ...e,
-      layers: e.layers.map(l => l.id === layerId ? { ...l, ...patch } : l),
-    }))
-  }, [activeImageId, updateEntry])
+        for (
+          const file
+          of validFiles
+        ) {
+          const src =
+            URL.createObjectURL(
+              file
+            )
 
-  const removeLayer = useCallback((layerId: string) => {
-    if (!activeImageId) return
-    updateEntry(activeImageId, e => {
-      const layers = e.layers.filter(l => l.id !== layerId)
-      return {
-        ...e,
-        layers,
-        activeLayerId: layers.length ? layers[layers.length - 1].id : null,
-      }
-    })
-  }, [activeImageId, updateEntry])
+          const id =
+            makeImageId()
 
-  const selectLayer = useCallback((layerId: string) => {
-    if (!activeImageId) return
-    updateEntry(activeImageId, e => ({ ...e, activeLayerId: layerId }))
-  }, [activeImageId, updateEntry])
+          /*
+          ====================================================
+          VÍDEO
+          ====================================================
+          */
 
-  const moveLayer = useCallback((layerId: string, x: number, y: number) => {
-    if (!activeImageId) return
-    updateEntry(activeImageId, e => ({
-      ...e,
-      layers: e.layers.map(l => l.id === layerId ? { ...l, x, y } : l),
-    }))
-  }, [activeImageId, updateEntry])
+          if (
+            file.type.startsWith(
+              'video/'
+            )
+          ) {
+            try {
+              const video =
+                await loadVideo(
+                  src
+                )
 
-  // ── IMAGE ADJUST ──────────────────────────────────────────────────────
-  const updateAdjust = useCallback((patch: Partial<ImageAdjust>) => {
-    if (!activeImageId) return
-    updateEntry(activeImageId, e => ({ ...e, adjust: { ...e.adjust, ...patch } }))
-  }, [activeImageId, updateEntry])
+              mediaElements.set(
+                id,
+                video
+              )
 
-  // ── AUDIO ─────────────────────────────────────────────────────────────
-  const handleAudioFile = useCallback((file: File) => {
-    if (!activeImageId) return
-    const r = new FileReader()
-    r.onload = e => {
-      const src = e.target!.result as string
-      updateEntry(activeImageId, entry => ({
-        ...entry,
-        audioSrc: src,
-        audioName: file.name,
-      }))
-    }
-    r.readAsDataURL(file)
-  }, [activeImageId, updateEntry])
+              const firstLayer =
+                makeLayer({
+                  x:
+                    0.5,
 
-  const handleRemoveAudio = useCallback(() => {
-    if (!activeImageId) return
-    updateEntry(activeImageId, e => ({ ...e, audioSrc: null, audioName: null }))
-  }, [activeImageId, updateEntry])
+                  y:
+                    0.72,
+                })
 
-  const handleApplyAudioToAll = useCallback(() => {
-    if (!activeEntry || !activeEntry.audioSrc) return
-    const { audioSrc, audioName } = activeEntry
-    setImages(prev => prev.map(img =>
-      img.id === activeEntry.id ? img : { ...img, audioSrc, audioName }
-    ))
-  }, [activeEntry])
+              newEntries.push({
+                id,
 
-  // ── APPLY LAYERS TO ALL ───────────────────────────────────────────────
-  const handleApplyToAll = useCallback(() => {
-    if (!activeEntry || images.length <= 1) return
-    const sourceLayers = activeEntry.layers
-    setImages(prev => prev.map(img => {
-      if (img.id === activeEntry.id) return img
-      const newLayers = sourceLayers.map(l => ({
-        ...l,
-        id: `layer-${Math.random().toString(36).slice(2)}-${Date.now()}`,
-      }))
-      return {
-        ...img,
-        layers: newLayers,
-        activeLayerId: newLayers.length ? newLayers[0].id : null,
-      }
-    }))
-  }, [activeEntry, images.length])
+                name:
+                  file.name,
 
-  // ── EXPORT IMAGE ──────────────────────────────────────────────────────
-  const handleExport = useCallback(() => {
-    if (!activeEntry) return
-    const el = imgElements.get(activeEntry.id)
-    if (!el) return
-    const url = exportCanvas(el, activeEntry.layers, activeEntry.adjust)
-    const a = document.createElement('a')
-    a.download = `overlay_${activeEntry.name.replace(/\.[^.]+$/, '')}.png`
-    a.href = url
-    a.click()
-  }, [activeEntry])
+                src,
 
-  const handleExportAll = useCallback(() => {
-    images.forEach(entry => {
-      const el = imgElements.get(entry.id)
-      if (!el) return
-      const url = exportCanvas(el, entry.layers, entry.adjust)
-      const a = document.createElement('a')
-      a.download = `overlay_${entry.name.replace(/\.[^.]+$/, '')}.png`
-      a.href = url
-      setTimeout(() => a.click(), 0)
-    })
-  }, [images])
+                mediaType:
+                  'video',
 
-  // ── EXPORT VIDEO ──────────────────────────────────────────────────────
-  const handleExportVideo = useCallback(async (entry: ImageEntry) => {
-    const el = imgElements.get(entry.id)
-    if (!el) return
+                width:
+                  video.videoWidth,
 
-    const VIDEO_DURATION = 5 // sempre 5 segundos
+                height:
+                  video.videoHeight,
 
-    const canvas = document.createElement('canvas')
-    canvas.width = el.naturalWidth
-    canvas.height = el.naturalHeight
-    const ctx = canvas.getContext('2d')!
+                duration:
+                  Number.isFinite(
+                    video.duration
+                  )
+                    ? video.duration
+                    : undefined,
 
-    // Apply adjustments + draw image + layers once (static frame)
-    const { buildFilter } = await import('@/lib/canvas')
-    ctx.filter = buildFilter(entry.adjust)
-    ctx.globalAlpha = entry.adjust.opacity
-    ctx.drawImage(el, 0, 0)
-    ctx.filter = 'none'
-    ctx.globalAlpha = 1
-    const { drawLayer } = await import('@/lib/canvas')
-    entry.layers.forEach(l => drawLayer(ctx, l, canvas.width, canvas.height))
+                layers: [
+                  firstLayer,
+                ],
 
-    const canvasStream = canvas.captureStream(25)
+                activeLayerId:
+                  firstLayer.id,
 
-    let audioTrack: MediaStreamTrack | null = null
+                adjust:
+                  defaultAdjust(),
 
-    if (entry.audioSrc) {
-      try {
-        const audioCtx = new AudioContext()
-        const res = await fetch(entry.audioSrc)
-        const buf = await res.arrayBuffer()
-        const decoded = await audioCtx.decodeAudioData(buf)
+                audioSrc:
+                  null,
 
-        const dest = audioCtx.createMediaStreamDestination()
-        const source = audioCtx.createBufferSource()
-        source.buffer = decoded
-        source.connect(dest)
-        source.start()
-        audioTrack = dest.stream.getAudioTracks()[0]
-      } catch (e) {
-        console.warn('Audio processing failed', e)
-      }
-    }
+                audioName:
+                  null,
+              })
+            } catch (
+            error
+            ) {
+              console.error(
+                `Erro carregando ${file.name}`,
+                error
+              )
 
-    const tracks: MediaStreamTrack[] = [...canvasStream.getTracks()]
-    if (audioTrack) tracks.push(audioTrack)
-    const stream = new MediaStream(tracks)
+              URL.revokeObjectURL(
+                src
+              )
+            }
 
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
-      ? 'video/webm;codecs=vp9,opus'
-      : 'video/webm'
+            continue
+          }
 
-    const recorder = new MediaRecorder(stream, { mimeType })
-    const chunks: BlobPart[] = []
-    recorder.ondataavailable = e => chunks.push(e.data)
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: 'video/webm' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.download = `video_${entry.name.replace(/\.[^.]+$/, '')}.webm`
-      a.href = url
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(url), 10000)
-    }
+          /*
+          ====================================================
+          IMAGEM
+          ====================================================
+          */
 
-    recorder.start()
-    setTimeout(() => recorder.stop(), VIDEO_DURATION * 1000) // sempre 5s
-  }, [])
+          try {
+            const image =
+              await loadImage(
+                src
+              )
 
-  // ── GLOBAL PASTE ──────────────────────────────────────────────────────
+            mediaElements.set(
+              id,
+              image
+            )
+
+            const firstLayer =
+              makeLayer({
+                x:
+                  0.5,
+
+                y:
+                  0.72,
+              })
+
+            newEntries.push({
+              id,
+
+              name:
+                file.name,
+
+              src,
+
+              mediaType:
+                'image',
+
+              width:
+                image.naturalWidth,
+
+              height:
+                image.naturalHeight,
+
+              layers: [
+                firstLayer,
+              ],
+
+              activeLayerId:
+                firstLayer.id,
+
+              adjust:
+                defaultAdjust(),
+
+              audioSrc:
+                null,
+
+              audioName:
+                null,
+            })
+          } catch (
+          error
+          ) {
+            console.error(
+              `Erro carregando ${file.name}`,
+              error
+            )
+
+            URL.revokeObjectURL(
+              src
+            )
+          }
+        }
+
+        if (
+          !newEntries.length
+        ) {
+          return
+        }
+
+        setImages(
+          previous => [
+            ...previous,
+            ...newEntries,
+          ]
+        )
+
+        setActiveImageId(
+          newEntries[0].id
+        )
+      },
+      []
+    )
+
+  /*
+  ============================================================
+  REMOVER MÍDIA
+  ============================================================
+  */
+
+  const handleRemoveImage =
+    useCallback(
+      (
+        id: string
+      ) => {
+        const media =
+          mediaElements.get(
+            id
+          )
+
+        if (
+          media instanceof
+          HTMLVideoElement
+        ) {
+          media.pause()
+
+          media.removeAttribute(
+            'src'
+          )
+
+          media.load()
+        }
+
+        mediaElements.delete(
+          id
+        )
+
+        setImages(
+          previous => {
+            const removed =
+              previous.find(
+                item =>
+                  item.id ===
+                  id
+              )
+
+            if (
+              removed?.src.startsWith(
+                'blob:'
+              )
+            ) {
+              URL.revokeObjectURL(
+                removed.src
+              )
+            }
+
+            const next =
+              previous.filter(
+                item =>
+                  item.id !==
+                  id
+              )
+
+            if (
+              activeImageId ===
+              id
+            ) {
+              setActiveImageId(
+                next.length
+                  ? next[
+                    next.length -
+                    1
+                  ].id
+                  : null
+              )
+            }
+
+            return next
+          }
+        )
+      },
+      [
+        activeImageId,
+      ]
+    )
+
+  /*
+  ============================================================
+  UPDATE ENTRY
+  ============================================================
+  */
+
+  const updateEntry =
+    useCallback(
+      (
+        id: string,
+
+        fn: (
+          entry:
+            ImageEntry
+        ) => ImageEntry
+      ) => {
+        setImages(
+          previous =>
+            previous.map(
+              item =>
+                item.id ===
+                  id
+                  ? fn(
+                    item
+                  )
+                  : item
+            )
+        )
+      },
+      []
+    )
+
+  /*
+  ============================================================
+  ADICIONAR TEXTO
+  ============================================================
+  */
+
+  const addLayer =
+    useCallback(
+      (
+        layer:
+          TextLayer
+      ) => {
+        if (
+          !activeImageId
+        ) {
+          return
+        }
+
+        updateEntry(
+          activeImageId,
+
+          entry => ({
+            ...entry,
+
+            layers: [
+              ...entry.layers,
+              layer,
+            ],
+
+            activeLayerId:
+              layer.id,
+          })
+        )
+      },
+      [
+        activeImageId,
+        updateEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  ATUALIZAR TEXTO
+  ============================================================
+  */
+
+  const updateLayer =
+    useCallback(
+      (
+        layerId:
+          string,
+
+        patch:
+          Partial<TextLayer>
+      ) => {
+        if (
+          !activeImageId
+        ) {
+          return
+        }
+
+        updateEntry(
+          activeImageId,
+
+          entry => ({
+            ...entry,
+
+            layers:
+              entry.layers.map(
+                layer =>
+                  layer.id ===
+                    layerId
+                    ? {
+                      ...layer,
+                      ...patch,
+                    }
+                    : layer
+              ),
+          })
+        )
+      },
+      [
+        activeImageId,
+        updateEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  REMOVER TEXTO
+  ============================================================
+  */
+
+  const removeLayer =
+    useCallback(
+      (
+        layerId:
+          string
+      ) => {
+        if (
+          !activeImageId
+        ) {
+          return
+        }
+
+        updateEntry(
+          activeImageId,
+
+          entry => {
+            const layers =
+              entry.layers.filter(
+                layer =>
+                  layer.id !==
+                  layerId
+              )
+
+            return {
+              ...entry,
+
+              layers,
+
+              activeLayerId:
+                layers.length
+                  ? layers[
+                    layers.length -
+                    1
+                  ].id
+                  : null,
+            }
+          }
+        )
+      },
+      [
+        activeImageId,
+        updateEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  SELECIONAR TEXTO
+  ============================================================
+  */
+
+  const selectLayer =
+    useCallback(
+      (
+        layerId:
+          string
+      ) => {
+        if (
+          !activeImageId
+        ) {
+          return
+        }
+
+        updateEntry(
+          activeImageId,
+
+          entry => ({
+            ...entry,
+
+            activeLayerId:
+              layerId,
+          })
+        )
+      },
+      [
+        activeImageId,
+        updateEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  MOVER TEXTO
+  ============================================================
+  */
+
+  const moveLayer =
+    useCallback(
+      (
+        layerId:
+          string,
+
+        x:
+          number,
+
+        y:
+          number
+      ) => {
+        if (
+          !activeImageId
+        ) {
+          return
+        }
+
+        updateEntry(
+          activeImageId,
+
+          entry => ({
+            ...entry,
+
+            layers:
+              entry.layers.map(
+                layer =>
+                  layer.id ===
+                    layerId
+                    ? {
+                      ...layer,
+                      x,
+                      y,
+                    }
+                    : layer
+              ),
+          })
+        )
+      },
+      [
+        activeImageId,
+        updateEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  AJUSTAR MÍDIA
+  ============================================================
+  */
+
+  const updateAdjust =
+    useCallback(
+      (
+        patch:
+          Partial<ImageAdjust>
+      ) => {
+        if (
+          !activeImageId
+        ) {
+          return
+        }
+
+        updateEntry(
+          activeImageId,
+
+          entry => ({
+            ...entry,
+
+            adjust: {
+              ...entry.adjust,
+              ...patch,
+            },
+          })
+        )
+      },
+      [
+        activeImageId,
+        updateEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  ÁUDIO EXTRA
+  ============================================================
+  */
+
+  const handleAudioFile =
+    useCallback(
+      (
+        file: File
+      ) => {
+        if (
+          !activeImageId
+        ) {
+          return
+        }
+
+        const reader =
+          new FileReader()
+
+        reader.onload =
+          event => {
+            const src =
+              event.target
+                ?.result as
+              | string
+              | null
+
+            if (!src) {
+              return
+            }
+
+            updateEntry(
+              activeImageId,
+
+              entry => ({
+                ...entry,
+
+                audioSrc:
+                  src,
+
+                audioName:
+                  file.name,
+              })
+            )
+          }
+
+        reader.readAsDataURL(
+          file
+        )
+      },
+      [
+        activeImageId,
+        updateEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  REMOVER ÁUDIO
+  ============================================================
+  */
+
+  const handleRemoveAudio =
+    useCallback(
+      () => {
+        if (
+          !activeImageId
+        ) {
+          return
+        }
+
+        updateEntry(
+          activeImageId,
+
+          entry => ({
+            ...entry,
+
+            audioSrc:
+              null,
+
+            audioName:
+              null,
+          })
+        )
+      },
+      [
+        activeImageId,
+        updateEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  APLICAR ÁUDIO EM TODAS
+  ============================================================
+  */
+
+  const handleApplyAudioToAll =
+    useCallback(
+      () => {
+        if (
+          !activeEntry ||
+          !activeEntry.audioSrc
+        ) {
+          return
+        }
+
+        const {
+          audioSrc,
+          audioName,
+        } =
+          activeEntry
+
+        setImages(
+          previous =>
+            previous.map(
+              item =>
+                item.id ===
+                  activeEntry.id
+                  ? item
+                  : {
+                    ...item,
+
+                    audioSrc,
+
+                    audioName,
+                  }
+            )
+        )
+      },
+      [
+        activeEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  APLICAR TEXTO EM TODAS AS MÍDIAS
+  ============================================================
+  */
+
+  const handleApplyToAll =
+    useCallback(
+      () => {
+        if (
+          !activeEntry ||
+          images.length <=
+          1
+        ) {
+          return
+        }
+
+        const sourceLayers =
+          activeEntry.layers
+
+        setImages(
+          previous =>
+            previous.map(
+              item => {
+                if (
+                  item.id ===
+                  activeEntry.id
+                ) {
+                  return item
+                }
+
+                const newLayers =
+                  sourceLayers.map(
+                    layer => ({
+                      ...layer,
+
+                      id:
+                        typeof crypto !==
+                          'undefined' &&
+                          crypto.randomUUID
+                          ? crypto.randomUUID()
+                          : `layer-${Date.now()}-${Math.random()
+                            .toString(
+                              36
+                            )
+                            .slice(
+                              2
+                            )}`,
+                    })
+                  )
+
+                return {
+                  ...item,
+
+                  layers:
+                    newLayers,
+
+                  activeLayerId:
+                    newLayers[0]
+                      ?.id ??
+                    null,
+                }
+              }
+            )
+        )
+      },
+      [
+        activeEntry,
+        images.length,
+      ]
+    )
+
+  /*
+  ============================================================
+  EXPORTAR IMAGEM
+  ============================================================
+  */
+
+  const handleExport =
+    useCallback(
+      () => {
+        if (
+          !activeEntry ||
+          activeEntry.mediaType !==
+          'image'
+        ) {
+          return
+        }
+
+        const media =
+          mediaElements.get(
+            activeEntry.id
+          )
+
+        if (
+          !media ||
+          !(
+            media instanceof
+            HTMLImageElement
+          )
+        ) {
+          return
+        }
+
+        const url =
+          exportCanvas(
+            media,
+            activeEntry.layers,
+            activeEntry.adjust
+          )
+
+        const link =
+          document.createElement(
+            'a'
+          )
+
+        link.download =
+          `overlay_${removeExtension(
+            activeEntry.name
+          )}.png`
+
+        link.href =
+          url
+
+        link.click()
+      },
+      [
+        activeEntry,
+      ]
+    )
+
+  /*
+  ============================================================
+  EXPORTAR TODAS AS IMAGENS
+  ============================================================
+  */
+
+  const handleExportAll =
+    useCallback(
+      () => {
+        const onlyImages =
+          images.filter(
+            entry =>
+              entry.mediaType ===
+              'image'
+          )
+
+        onlyImages.forEach(
+          (
+            entry,
+            index
+          ) => {
+            const media =
+              mediaElements.get(
+                entry.id
+              )
+
+            if (
+              !media ||
+              !(
+                media instanceof
+                HTMLImageElement
+              )
+            ) {
+              return
+            }
+
+            const url =
+              exportCanvas(
+                media,
+                entry.layers,
+                entry.adjust
+              )
+
+            const link =
+              document.createElement(
+                'a'
+              )
+
+            link.download =
+              `overlay_${removeExtension(
+                entry.name
+              )}.png`
+
+            link.href =
+              url
+
+            setTimeout(
+              () => {
+                link.click()
+              },
+              index * 150
+            )
+          }
+        )
+      },
+      [
+        images,
+      ]
+    )
+
+  /*
+  ============================================================
+  EXPORTAR IMAGEM COMO VÍDEO
+  ============================================================
+  */
+
+  const exportImageAsVideo =
+    useCallback(
+      async (
+        entry:
+          ImageEntry
+      ) => {
+        const media =
+          mediaElements.get(
+            entry.id
+          )
+
+        if (
+          !media ||
+          !(
+            media instanceof
+            HTMLImageElement
+          )
+        ) {
+          return
+        }
+
+        const canvas =
+          document.createElement(
+            'canvas'
+          )
+
+        canvas.width =
+          media.naturalWidth
+
+        canvas.height =
+          media.naturalHeight
+
+        const ctx =
+          canvas.getContext(
+            '2d'
+          )
+
+        if (!ctx) {
+          return
+        }
+
+        /*
+        ======================================================
+        DESENHAR IMAGEM
+        ======================================================
+        */
+
+        ctx.filter =
+          buildFilter(
+            entry.adjust
+          )
+
+        ctx.globalAlpha =
+          entry.adjust.opacity
+
+        ctx.drawImage(
+          media,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        )
+
+        ctx.filter =
+          'none'
+
+        ctx.globalAlpha =
+          1
+
+        entry.layers.forEach(
+          layer => {
+            drawLayer(
+              ctx,
+              layer,
+              canvas.width,
+              canvas.height
+            )
+          }
+        )
+
+        /*
+        ======================================================
+        STREAM
+        ======================================================
+        */
+
+        const canvasStream =
+          canvas.captureStream(
+            30
+          )
+
+        const tracks:
+          MediaStreamTrack[] =
+          [
+            ...canvasStream
+              .getVideoTracks(),
+          ]
+
+        let duration =
+          5
+
+        let audioContext:
+          AudioContext |
+          null =
+          null
+
+        /*
+        ======================================================
+        ÁUDIO OPCIONAL
+        ======================================================
+        */
+
+        if (
+          entry.audioSrc
+        ) {
+          try {
+            audioContext =
+              new AudioContext()
+
+            await audioContext.resume()
+
+            const response =
+              await fetch(
+                entry.audioSrc
+              )
+
+            const arrayBuffer =
+              await response.arrayBuffer()
+
+            const decoded =
+              await audioContext.decodeAudioData(
+                arrayBuffer
+              )
+
+            duration =
+              decoded.duration
+
+            const destination =
+              audioContext.createMediaStreamDestination()
+
+            const source =
+              audioContext.createBufferSource()
+
+            source.buffer =
+              decoded
+
+            source.connect(
+              destination
+            )
+
+            source.start(
+              0
+            )
+
+            const audioTrack =
+              destination.stream.getAudioTracks()[0]
+
+            if (
+              audioTrack
+            ) {
+              tracks.push(
+                audioTrack
+              )
+            }
+          } catch (
+          error
+          ) {
+            console.warn(
+              'Erro ao processar áudio:',
+              error
+            )
+          }
+        }
+
+        const stream =
+          new MediaStream(
+            tracks
+          )
+
+        const mimeType =
+          MediaRecorder.isTypeSupported(
+            'video/webm;codecs=vp9,opus'
+          )
+            ? 'video/webm;codecs=vp9,opus'
+            : MediaRecorder.isTypeSupported(
+              'video/webm;codecs=vp8,opus'
+            )
+              ? 'video/webm;codecs=vp8,opus'
+              : 'video/webm'
+
+        const recorder =
+          new MediaRecorder(
+            stream,
+            {
+              mimeType,
+
+              videoBitsPerSecond:
+                8_000_000,
+            }
+          )
+
+        const chunks:
+          BlobPart[] =
+          []
+
+        recorder.ondataavailable =
+          event => {
+            if (
+              event.data.size >
+              0
+            ) {
+              chunks.push(
+                event.data
+              )
+            }
+          }
+
+        recorder.onstop =
+          () => {
+            const blob =
+              new Blob(
+                chunks,
+                {
+                  type:
+                    mimeType,
+                }
+              )
+
+            downloadBlob(
+              blob,
+
+              `video_${removeExtension(
+                entry.name
+              )}.webm`
+            )
+
+            audioContext
+              ?.close()
+              .catch(
+                () => { }
+              )
+          }
+
+        recorder.start(
+          250
+        )
+
+        setTimeout(
+          () => {
+            if (
+              recorder.state !==
+              'inactive'
+            ) {
+              recorder.stop()
+            }
+          },
+          Math.max(
+            0.5,
+            duration
+          ) * 1000
+        )
+      },
+      []
+    )
+
+  /*
+  ============================================================
+  EXPORTAR VÍDEO ORIGINAL COM TEXTOS
+  ============================================================
+  */
+
+  const exportUploadedVideo =
+    useCallback(
+      async (
+        entry:
+          ImageEntry
+      ) => {
+        if (
+          entry.mediaType !==
+          'video'
+        ) {
+          return
+        }
+
+        /*
+        ======================================================
+        CRIAR VÍDEO NOVO PARA EXPORTAÇÃO
+        ======================================================
+        */
+
+        const video =
+          document.createElement(
+            'video'
+          )
+
+        video.src =
+          entry.src
+
+        video.preload =
+          'auto'
+
+        video.playsInline =
+          true
+
+        video.loop =
+          false
+
+        /*
+        ======================================================
+        ESPERAR METADATA
+        ======================================================
+        */
+
+        await new Promise<void>(
+          (
+            resolve,
+            reject
+          ) => {
+            const done =
+              () => {
+                cleanup()
+
+                resolve()
+              }
+
+            const failed =
+              () => {
+                cleanup()
+
+                reject(
+                  new Error(
+                    'Erro ao carregar o vídeo para exportação.'
+                  )
+                )
+              }
+
+            const cleanup =
+              () => {
+                video.removeEventListener(
+                  'loadedmetadata',
+                  done
+                )
+
+                video.removeEventListener(
+                  'error',
+                  failed
+                )
+              }
+
+            video.addEventListener(
+              'loadedmetadata',
+              done
+            )
+
+            video.addEventListener(
+              'error',
+              failed
+            )
+
+            video.load()
+          }
+        )
+
+        /*
+        ======================================================
+        CANVAS
+        ======================================================
+        */
+
+        const canvas =
+          document.createElement(
+            'canvas'
+          )
+
+        canvas.width =
+          video.videoWidth
+
+        canvas.height =
+          video.videoHeight
+
+        const ctx =
+          canvas.getContext(
+            '2d'
+          )
+
+        if (!ctx) {
+          return
+        }
+
+        /*
+        ======================================================
+        STREAM DO CANVAS
+        ======================================================
+        */
+
+        const canvasStream =
+          canvas.captureStream(
+            30
+          )
+
+        const tracks:
+          MediaStreamTrack[] =
+          [
+            ...canvasStream
+              .getVideoTracks(),
+          ]
+
+        /*
+        ======================================================
+        ÁUDIO ORIGINAL
+        ======================================================
+        */
+
+        let audioContext:
+          AudioContext |
+          null =
+          null
+
+        try {
+          audioContext =
+            new AudioContext()
+
+          await audioContext.resume()
+
+          const source =
+            audioContext.createMediaElementSource(
+              video
+            )
+
+          const destination =
+            audioContext.createMediaStreamDestination()
+
+          /*
+          O áudio vai para o recorder,
+          não precisa sair nos alto-falantes.
+          */
+
+          source.connect(
+            destination
+          )
+
+          const audioTrack =
+            destination.stream.getAudioTracks()[0]
+
+          if (
+            audioTrack
+          ) {
+            tracks.push(
+              audioTrack
+            )
+          }
+        } catch (
+        error
+        ) {
+          console.warn(
+            'Não foi possível capturar o áudio original:',
+            error
+          )
+        }
+
+        /*
+        ======================================================
+        STREAM FINAL
+        ======================================================
+        */
+
+        const outputStream =
+          new MediaStream(
+            tracks
+          )
+
+        const mimeType =
+          MediaRecorder.isTypeSupported(
+            'video/webm;codecs=vp9,opus'
+          )
+            ? 'video/webm;codecs=vp9,opus'
+            : MediaRecorder.isTypeSupported(
+              'video/webm;codecs=vp8,opus'
+            )
+              ? 'video/webm;codecs=vp8,opus'
+              : 'video/webm'
+
+        const recorder =
+          new MediaRecorder(
+            outputStream,
+            {
+              mimeType,
+
+              videoBitsPerSecond:
+                8_000_000,
+            }
+          )
+
+        const chunks:
+          BlobPart[] =
+          []
+
+        recorder.ondataavailable =
+          event => {
+            if (
+              event.data.size >
+              0
+            ) {
+              chunks.push(
+                event.data
+              )
+            }
+          }
+
+        /*
+        ======================================================
+        RENDER DOS FRAMES
+        ======================================================
+        */
+
+        let animation =
+          0
+
+        const renderFrame =
+          () => {
+            ctx.clearRect(
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            )
+
+            /*
+            ================================================
+            VÍDEO
+            ================================================
+            */
+
+            ctx.save()
+
+            ctx.filter =
+              buildFilter(
+                entry.adjust
+              )
+
+            ctx.globalAlpha =
+              entry.adjust.opacity
+
+            try {
+              ctx.drawImage(
+                video,
+                0,
+                0,
+                canvas.width,
+                canvas.height
+              )
+            } catch {
+              // ignora frame
+              // indisponível
+            }
+
+            ctx.restore()
+
+            /*
+            ================================================
+            TEXTOS
+            ================================================
+            */
+
+            entry.layers.forEach(
+              layer => {
+                drawLayer(
+                  ctx,
+                  layer,
+                  canvas.width,
+                  canvas.height
+                )
+              }
+            )
+
+            if (
+              !video.ended
+            ) {
+              animation =
+                requestAnimationFrame(
+                  renderFrame
+                )
+            }
+          }
+
+        /*
+        ======================================================
+        FINALIZAR
+        ======================================================
+        */
+
+        const finished =
+          new Promise<void>(
+            resolve => {
+              recorder.onstop =
+                () => {
+                  cancelAnimationFrame(
+                    animation
+                  )
+
+                  const blob =
+                    new Blob(
+                      chunks,
+                      {
+                        type:
+                          mimeType,
+                      }
+                    )
+
+                  downloadBlob(
+                    blob,
+
+                    `editado_${removeExtension(
+                      entry.name
+                    )}.webm`
+                  )
+
+                  canvasStream
+                    .getTracks()
+                    .forEach(
+                      track =>
+                        track.stop()
+                    )
+
+                  audioContext
+                    ?.close()
+                    .catch(
+                      () => { }
+                    )
+
+                  resolve()
+                }
+            }
+          )
+
+        video.currentTime =
+          0
+
+        const ended =
+          new Promise<void>(
+            resolve => {
+              video.onended =
+                () =>
+                  resolve()
+            }
+          )
+
+        recorder.start(
+          250
+        )
+
+        await video.play()
+
+        renderFrame()
+
+        await ended
+
+        if (
+          recorder.state !==
+          'inactive'
+        ) {
+          recorder.stop()
+        }
+
+        await finished
+      },
+      []
+    )
+
+  /*
+  ============================================================
+  EXPORTAR COMO VÍDEO
+  ============================================================
+  */
+
+  const handleExportVideo =
+    useCallback(
+      async (
+        entry:
+          ImageEntry
+      ) => {
+        try {
+          if (
+            entry.mediaType ===
+            'video'
+          ) {
+            await exportUploadedVideo(
+              entry
+            )
+
+            return
+          }
+
+          await exportImageAsVideo(
+            entry
+          )
+        } catch (
+        error
+        ) {
+          console.error(
+            'Erro ao exportar vídeo:',
+            error
+          )
+
+          alert(
+            'Não foi possível exportar o vídeo.'
+          )
+        }
+      },
+      [
+        exportUploadedVideo,
+        exportImageAsVideo,
+      ]
+    )
+
+  /*
+  ============================================================
+  CTRL + V / COLAR IMAGEM
+  ============================================================
+  */
+
   useEffect(() => {
-    const onPaste = async (e: ClipboardEvent) => {
-      const items = Array.from(e.clipboardData?.items ?? [])
-      const imageItems = items.filter(i => i.type.startsWith('image/'))
-      if (!imageItems.length) return
-      const files = imageItems.map(i => i.getAsFile()).filter(Boolean) as File[]
-      const dt = new DataTransfer()
-      files.forEach(f => dt.items.add(f))
-      if (dt.files.length) handleFiles(dt.files)
+    const onPaste =
+      (
+        event:
+          ClipboardEvent
+      ) => {
+        const items =
+          Array.from(
+            event.clipboardData
+              ?.items ??
+            []
+          )
+
+        const mediaItems =
+          items.filter(
+            item =>
+              item.type.startsWith(
+                'image/'
+              ) ||
+              item.type.startsWith(
+                'video/'
+              )
+          )
+
+        if (
+          !mediaItems.length
+        ) {
+          return
+        }
+
+        const files =
+          mediaItems
+            .map(
+              item =>
+                item.getAsFile()
+            )
+            .filter(
+              (
+                file
+              ): file is File =>
+                Boolean(
+                  file
+                )
+            )
+
+        const transfer =
+          new DataTransfer()
+
+        files.forEach(
+          file =>
+            transfer.items.add(
+              file
+            )
+        )
+
+        if (
+          transfer.files
+            .length
+        ) {
+          handleFiles(
+            transfer.files
+          )
+        }
+      }
+
+    window.addEventListener(
+      'paste',
+      onPaste
+    )
+
+    return () => {
+      window.removeEventListener(
+        'paste',
+        onPaste
+      )
     }
-    window.addEventListener('paste', onPaste)
-    return () => window.removeEventListener('paste', onPaste)
-  }, [handleFiles])
+  }, [
+    handleFiles,
+  ])
 
-  const handleAreaDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files)
-  }, [handleFiles])
+  /*
+  ============================================================
+  DROP NA ÁREA
+  ============================================================
+  */
 
-  const isEmpty = images.length === 0
+  const handleAreaDrop =
+    useCallback(
+      (
+        event:
+          React.DragEvent
+      ) => {
+        event.preventDefault()
+
+        if (
+          event.dataTransfer
+            .files.length
+        ) {
+          handleFiles(
+            event.dataTransfer
+              .files
+          )
+        }
+      },
+      [
+        handleFiles,
+      ]
+    )
+
+  /*
+  ============================================================
+  LIMPEZA AO DESMONTAR
+  ============================================================
+  */
+
+  useEffect(
+    () => {
+      return () => {
+        mediaElements.forEach(
+          element => {
+            if (
+              element instanceof
+              HTMLVideoElement
+            ) {
+              element.pause()
+            }
+          }
+        )
+      }
+    },
+    []
+  )
+
+  /*
+  ============================================================
+  ESTADOS VISUAIS
+  ============================================================
+  */
+
+  const isEmpty =
+    images.length ===
+    0
+
+  const imageAmount =
+    images.filter(
+      item =>
+        item.mediaType ===
+        'image'
+    ).length
+
+  const videoAmount =
+    images.filter(
+      item =>
+        item.mediaType ===
+        'video'
+    ).length
+
+  /*
+  ============================================================
+  JSX
+  ============================================================
+  */
 
   return (
-    <div className={styles.app}>
-      <header className={styles.header}>
-        <div className={styles.logo}>
-          <span className={styles.logoIcon}>🎬</span>
-          <span className={styles.logoText}>TextOverlay</span>
+    <div
+      className={
+        styles.app
+      }
+    >
+      <header
+        className={
+          styles.header
+        }
+      >
+        <div
+          className={
+            styles.logo
+          }
+        >
+          <span
+            className={
+              styles.logoIcon
+            }
+          >
+            🎬
+          </span>
+
+          <span
+            className={
+              styles.logoText
+            }
+          >
+            TextOverlay
+          </span>
         </div>
-        <span className={styles.headerSub}>
-          {isEmpty ? 'Faça upload de imagens para começar' : `${images.length} imagem${images.length > 1 ? 's' : ''} carregada${images.length > 1 ? 's' : ''}`}
+
+        <span
+          className={
+            styles.headerSub
+          }
+        >
+          {isEmpty
+            ? 'Faça upload de imagens ou vídeos para começar'
+            : `${images.length} mídia${images.length >
+              1
+              ? 's'
+              : ''
+            } carregada${images.length >
+              1
+              ? 's'
+              : ''
+            } · ${imageAmount} imagem${imageAmount !==
+              1
+              ? 's'
+              : ''
+            } · ${videoAmount} vídeo${videoAmount !==
+              1
+              ? 's'
+              : ''
+            }`}
         </span>
       </header>
 
-      <div className={styles.body}>
+      <div
+        className={
+          styles.body
+        }
+      >
         <Sidebar
-          entry={activeEntry}
-          onLayerAdd={addLayer}
-          onLayerUpdate={updateLayer}
-          onLayerRemove={removeLayer}
-          onLayerSelect={selectLayer}
-          onAdjustUpdate={updateAdjust}
-          onAudioFile={handleAudioFile}
-          onAudioRemove={handleRemoveAudio}
-          onApplyAudioToAll={handleApplyAudioToAll}
-          onExport={handleExport}
-          onExportAll={handleExportAll}
-          onExportVideo={() => activeEntry && handleExportVideo(activeEntry)}
-          onApplyToAll={handleApplyToAll}
-          imageCount={images.length}
+          entry={
+            activeEntry
+          }
+
+          onLayerAdd={
+            addLayer
+          }
+
+          onLayerUpdate={
+            updateLayer
+          }
+
+          onLayerRemove={
+            removeLayer
+          }
+
+          onLayerSelect={
+            selectLayer
+          }
+
+          onAdjustUpdate={
+            updateAdjust
+          }
+
+          onAudioFile={
+            handleAudioFile
+          }
+
+          onAudioRemove={
+            handleRemoveAudio
+          }
+
+          onApplyAudioToAll={
+            handleApplyAudioToAll
+          }
+
+          onExport={
+            handleExport
+          }
+
+          onExportAll={
+            handleExportAll
+          }
+
+          onExportVideo={() => {
+            if (
+              activeEntry
+            ) {
+              void handleExportVideo(
+                activeEntry
+              )
+            }
+          }}
+
+          onApplyToAll={
+            handleApplyToAll
+          }
+
+          imageCount={
+            images.length
+          }
         />
 
-        <main className={styles.main}>
-          {images.length > 0 && (
-            <ImageStrip
-              images={images}
-              activeId={activeImageId}
-              onSelect={setActiveImageId}
-              onRemove={handleRemoveImage}
-              onAdd={handleFiles}
-            />
-          )}
+        <main
+          className={
+            styles.main
+          }
+        >
+          {images.length >
+            0 && (
+              <ImageStrip
+                images={
+                  images
+                }
+
+                activeId={
+                  activeImageId
+                }
+
+                onSelect={
+                  setActiveImageId
+                }
+
+                onRemove={
+                  handleRemoveImage
+                }
+
+                onAdd={
+                  handleFiles
+                }
+              />
+            )}
 
           <div
-            className={styles.canvasArea}
-            onDrop={handleAreaDrop}
-            onDragOver={e => e.preventDefault()}
+            className={
+              styles.canvasArea
+            }
+
+            onDrop={
+              handleAreaDrop
+            }
+
+            onDragOver={e =>
+              e.preventDefault()
+            }
           >
             {isEmpty ? (
-              <DropZone onFiles={handleFiles} />
-            ) : activeEntry && activeImgEl ? (
+              <DropZone
+                onFiles={
+                  handleFiles
+                }
+              />
+            ) : activeEntry &&
+              activeMediaEl ? (
               <CanvasEditor
-                key={activeEntry.id}
-                entry={activeEntry}
-                imgEl={activeImgEl}
-                onLayerMove={moveLayer}
-                onLayerSelect={selectLayer}
+                key={
+                  activeEntry.id
+                }
+
+                entry={
+                  activeEntry
+                }
+
+                mediaEl={
+                  activeMediaEl
+                }
+
+                onLayerMove={
+                  moveLayer
+                }
+
+                onLayerSelect={
+                  selectLayer
+                }
               />
             ) : (
-              <div className={styles.noSelection}>
-                <span>Selecione uma imagem acima</span>
+              <div
+                className={
+                  styles.noSelection
+                }
+              >
+                <span>
+                  Selecione uma
+                  mídia acima
+                </span>
               </div>
             )}
           </div>
