@@ -388,6 +388,13 @@
 .exportVideoBtn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* Comfortable controls and consistent action hierarchy. */
+.exportVideosBtn { min-height: 48px; width: 100%; padding: 12px; border: 1px solid var(--accent); border-radius: 9px; background: var(--accent); color: #241016; font-size: 12px; font-weight: 700; line-height: 1.5; transition: background 0.15s; }
+.exportVideosBtn:hover:not(:disabled) { background: var(--accent2); }
+.exportHint { font-size: 11px; line-height: 1.6; color: var(--muted); }
+.exportProgress { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface2); border-radius: 8px; font-size: 11px; color: var(--muted); }
+.exportFilename { color: var(--text); overflow-wrap: anywhere; }
+.exportProgress progress { width: 100%; height: 8px; accent-color: var(--accent); }
+.exportMessage { color: var(--text); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .audioScope { padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 10px; color: var(--muted); }
 .muteControl { display: flex; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; font-size: 13px; line-height: 1.5; }
 .muteSwitch { appearance: none; width: 40px; height: 24px; flex: 0 0 40px; border: 1px solid var(--border2); border-radius: 20px; background: var(--surface2); cursor: pointer; transition: background 0.15s, border-color 0.15s; }

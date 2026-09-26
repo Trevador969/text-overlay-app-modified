@@ -24,6 +24,11 @@ import {
 import styles from './Sidebar.module.css'
 
 interface Props {
+  onExportAllVideos: () => void
+  videoCount: number
+  videoExportBusy: boolean
+  batchProgress: { current: number; total: number; name: string } | null
+  exportMessage: string
   muteAllVideos: boolean
   onMuteAllVideosChange: (muted: boolean) => void
 
@@ -206,6 +211,11 @@ const SNAP_GRID: {
   ]
 
 export default function Sidebar({
+  onExportAllVideos,
+  videoCount,
+  videoExportBusy,
+  batchProgress,
+  exportMessage,
   muteAllVideos,
   onMuteAllVideosChange,
 
@@ -300,6 +310,7 @@ export default function Sidebar({
             role="switch"
             className={styles.muteSwitch}
             checked={muteAllVideos}
+            disabled={videoExportBusy}
             onChange={event => onMuteAllVideosChange(event.target.checked)}
             aria-describedby="mute-videos-hint"
           />
@@ -1619,12 +1630,40 @@ export default function Sidebar({
           }
 
           disabled={
-            !entry
+            !entry || videoExportBusy
           }
         >
           ▶ Exportar como
           vídeo
         </button>
+
+        <button
+          type="button"
+          className={styles.exportVideosBtn}
+          onClick={onExportAllVideos}
+          disabled={!videoCount || videoExportBusy}
+        >
+          {batchProgress
+            ? `Exportando ${batchProgress.current} de ${batchProgress.total}…`
+            : `⬇ Baixar todos os vídeos editados (${videoCount})`}
+        </button>
+        <p className={styles.exportHint}>
+          Um arquivo ZIP com os vídeos em WebM, textos, ajustes e som aplicado.
+        </p>
+        {batchProgress && (
+          <div className={styles.exportProgress} role="status" aria-live="polite">
+            <span className={styles.exportFilename}>{batchProgress.name}</span>
+            <progress
+              aria-label="Progresso da exportação dos vídeos"
+              value={batchProgress.current}
+              max={batchProgress.total}
+            />
+            <span>Mantenha esta aba aberta até o download terminar.</span>
+          </div>
+        )}
+        {exportMessage && (
+          <p className={styles.exportMessage} role="status">{exportMessage}</p>
+        )}
 
         {imageCount >
           1 && (

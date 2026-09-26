@@ -4,6 +4,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useRef,
 } from 'react'
 
 import type {
@@ -28,6 +29,7 @@ import ImageStrip from '@/components/ImageStrip'
 import CanvasEditor from '@/components/CanvasEditor'
 import Sidebar from '@/components/Sidebar'
 import DropZone from '@/components/DropZone'
+import { exportEditedVideo } from '@/lib/video'
 
 import styles from './page.module.css'
 
@@ -201,6 +203,10 @@ HOME
 
 export default function Home() {
   const [muteAllVideos, setMuteAllVideos] = useState(false)
+  const videoExportLock = useRef(false)
+  const [videoExportBusy, setVideoExportBusy] = useState(false)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; name: string } | null>(null)
+  const [exportMessage, setExportMessage] = useState('')
 
   const [
     images,
@@ -1405,6 +1411,10 @@ export default function Home() {
               )
           }
 
+        const finished = new Promise<void>(resolve => {
+          recorder.addEventListener('stop', () => resolve(), { once: true })
+        })
+
         recorder.start(
           250
         )
@@ -1423,6 +1433,7 @@ export default function Home() {
             duration
           ) * 1000
         )
+        await finished
       },
       [muteAllVideos]
     )
@@ -1433,380 +1444,10 @@ export default function Home() {
   ============================================================
   */
 
-  const exportUploadedVideo =
-    useCallback(
-      async (
-        entry:
-          ImageEntry
-      ) => {
-        if (
-          entry.mediaType !==
-          'video'
-        ) {
-          return
-        }
-
-        /*
-        ======================================================
-        CRIAR VÍDEO NOVO PARA EXPORTAÇÃO
-        ======================================================
-        */
-
-        const video =
-          document.createElement(
-            'video'
-          )
-
-        video.src =
-          entry.src
-
-        video.preload =
-          'auto'
-
-        video.playsInline =
-          true
-
-        video.loop =
-          false
-
-        video.muted = muteAllVideos
-
-        /*
-        ======================================================
-        ESPERAR METADATA
-        ======================================================
-        */
-
-        await new Promise<void>(
-          (
-            resolve,
-            reject
-          ) => {
-            const done =
-              () => {
-                cleanup()
-
-                resolve()
-              }
-
-            const failed =
-              () => {
-                cleanup()
-
-                reject(
-                  new Error(
-                    'Erro ao carregar o vídeo para exportação.'
-                  )
-                )
-              }
-
-            const cleanup =
-              () => {
-                video.removeEventListener(
-                  'loadedmetadata',
-                  done
-                )
-
-                video.removeEventListener(
-                  'error',
-                  failed
-                )
-              }
-
-            video.addEventListener(
-              'loadedmetadata',
-              done
-            )
-
-            video.addEventListener(
-              'error',
-              failed
-            )
-
-            video.load()
-          }
-        )
-
-        /*
-        ======================================================
-        CANVAS
-        ======================================================
-        */
-
-        const canvas =
-          document.createElement(
-            'canvas'
-          )
-
-        canvas.width =
-          video.videoWidth
-
-        canvas.height =
-          video.videoHeight
-
-        const ctx =
-          canvas.getContext(
-            '2d'
-          )
-
-        if (!ctx) {
-          return
-        }
-
-        /*
-        ======================================================
-        STREAM DO CANVAS
-        ======================================================
-        */
-
-        const canvasStream =
-          canvas.captureStream(
-            30
-          )
-
-        const tracks:
-          MediaStreamTrack[] =
-          [
-            ...canvasStream
-              .getVideoTracks(),
-          ]
-
-        /*
-        ======================================================
-        ÁUDIO ORIGINAL
-        ======================================================
-        */
-
-        let audioContext:
-          AudioContext |
-          null =
-          null
-
-        // A silent export contains no audio track, rather than a muted track.
-        if (!muteAllVideos) {
-          try {
-            audioContext = new AudioContext()
-            await audioContext.resume()
-
-            const source = audioContext.createMediaElementSource(video)
-            const destination = audioContext.createMediaStreamDestination()
-            source.connect(destination)
-
-            const audioTrack = destination.stream.getAudioTracks()[0]
-            if (audioTrack) tracks.push(audioTrack)
-          } catch (error) {
-            console.warn('Não foi possível capturar o áudio original:', error)
-          }
-        }
-
-        /*
-        ======================================================
-        STREAM FINAL
-        ======================================================
-        */
-
-        const outputStream =
-          new MediaStream(
-            tracks
-          )
-
-        const mimeType =
-          MediaRecorder.isTypeSupported(
-            'video/webm;codecs=vp9,opus'
-          )
-            ? 'video/webm;codecs=vp9,opus'
-            : MediaRecorder.isTypeSupported(
-              'video/webm;codecs=vp8,opus'
-            )
-              ? 'video/webm;codecs=vp8,opus'
-              : 'video/webm'
-
-        const recorder =
-          new MediaRecorder(
-            outputStream,
-            {
-              mimeType,
-
-              videoBitsPerSecond:
-                8_000_000,
-            }
-          )
-
-        const chunks:
-          BlobPart[] =
-          []
-
-        recorder.ondataavailable =
-          event => {
-            if (
-              event.data.size >
-              0
-            ) {
-              chunks.push(
-                event.data
-              )
-            }
-          }
-
-        /*
-        ======================================================
-        RENDER DOS FRAMES
-        ======================================================
-        */
-
-        let animation =
-          0
-
-        const renderFrame =
-          () => {
-            ctx.clearRect(
-              0,
-              0,
-              canvas.width,
-              canvas.height
-            )
-
-            /*
-            ================================================
-            VÍDEO
-            ================================================
-            */
-
-            ctx.save()
-
-            ctx.filter =
-              buildFilter(
-                entry.adjust
-              )
-
-            ctx.globalAlpha =
-              entry.adjust.opacity
-
-            try {
-              ctx.drawImage(
-                video,
-                0,
-                0,
-                canvas.width,
-                canvas.height
-              )
-            } catch {
-              // ignora frame
-              // indisponível
-            }
-
-            ctx.restore()
-
-            /*
-            ================================================
-            TEXTOS
-            ================================================
-            */
-
-            entry.layers.forEach(
-              layer => {
-                drawLayer(
-                  ctx,
-                  layer,
-                  canvas.width,
-                  canvas.height
-                )
-              }
-            )
-
-            if (
-              !video.ended
-            ) {
-              animation =
-                requestAnimationFrame(
-                  renderFrame
-                )
-            }
-          }
-
-        /*
-        ======================================================
-        FINALIZAR
-        ======================================================
-        */
-
-        const finished =
-          new Promise<void>(
-            resolve => {
-              recorder.onstop =
-                () => {
-                  cancelAnimationFrame(
-                    animation
-                  )
-
-                  const blob =
-                    new Blob(
-                      chunks,
-                      {
-                        type:
-                          mimeType,
-                      }
-                    )
-
-                  downloadBlob(
-                    blob,
-
-                    `editado_${removeExtension(
-                      entry.name
-                    )}.webm`
-                  )
-
-                  canvasStream
-                    .getTracks()
-                    .forEach(
-                      track =>
-                        track.stop()
-                    )
-
-                  audioContext
-                    ?.close()
-                    .catch(
-                      () => { }
-                    )
-
-                  resolve()
-                }
-            }
-          )
-
-        video.currentTime =
-          0
-
-        const ended =
-          new Promise<void>(
-            resolve => {
-              video.onended =
-                () =>
-                  resolve()
-            }
-          )
-
-        recorder.start(
-          250
-        )
-
-        await video.play()
-
-        renderFrame()
-
-        await ended
-
-        if (
-          recorder.state !==
-          'inactive'
-        ) {
-          recorder.stop()
-        }
-
-        await finished
-      },
-      [muteAllVideos]
-    )
+  const exportUploadedVideo = useCallback(async (entry: ImageEntry) => {
+    const blob = await exportEditedVideo(entry, muteAllVideos)
+    downloadBlob(blob, `editado_${removeExtension(entry.name)}.webm`)
+  }, [muteAllVideos])
 
   /*
   ============================================================
@@ -1820,6 +1461,10 @@ export default function Home() {
         entry:
           ImageEntry
       ) => {
+        if (videoExportLock.current) return
+        videoExportLock.current = true
+        setVideoExportBusy(true)
+        setExportMessage('')
         try {
           if (
             entry.mediaType ===
@@ -1846,6 +1491,9 @@ export default function Home() {
           alert(
             'Não foi possível exportar o vídeo.'
           )
+        } finally {
+          videoExportLock.current = false
+          setVideoExportBusy(false)
         }
       },
       [
@@ -1853,6 +1501,54 @@ export default function Home() {
         exportImageAsVideo,
       ]
     )
+
+  const handleExportAllVideos = useCallback(async () => {
+    const videos = images.filter(entry => entry.mediaType === 'video')
+    if (!videos.length || videoExportLock.current) return
+
+    videoExportLock.current = true
+    setVideoExportBusy(true)
+    setExportMessage('')
+    setBatchProgress({ current: 0, total: videos.length, name: 'Preparando os vídeos…' })
+    try {
+      const { default: JSZip } = await import('jszip')
+      const archive = new JSZip()
+      const failures: string[] = []
+      let completed = 0
+
+      // React updates entries immutably, so this batch keeps the edits from the click.
+      for (let index = 0; index < videos.length; index++) {
+        const entry = videos[index]
+        setBatchProgress({ current: index + 1, total: videos.length, name: entry.name })
+        try {
+          const blob = await exportEditedVideo(entry, muteAllVideos)
+          const safeName = removeExtension(entry.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || 'video'
+          const filename = `${String(index + 1).padStart(3, '0')}_editado_${safeName}.webm`
+          archive.file(filename, blob)
+          completed++
+        } catch (error) {
+          console.error(`Erro ao exportar ${entry.name}:`, error)
+          failures.push(entry.name)
+        }
+      }
+
+      if (completed) {
+        setBatchProgress({ current: videos.length, total: videos.length, name: 'Preparando o arquivo ZIP…' })
+        const zip = await archive.generateAsync({ type: 'blob', compression: 'STORE' })
+        downloadBlob(zip, 'videos_editados.zip')
+      }
+      setExportMessage(failures.length
+        ? `${completed} de ${videos.length} vídeos exportados. Falha em: ${failures.join(', ')}.`
+        : `${completed} vídeo${completed === 1 ? '' : 's'} editado${completed === 1 ? '' : 's'} no arquivo videos_editados.zip.`)
+    } catch (error) {
+      console.error('Erro ao baixar todos os vídeos:', error)
+      setExportMessage('Não foi possível preparar o download. Tente novamente.')
+    } finally {
+      videoExportLock.current = false
+      setVideoExportBusy(false)
+      setBatchProgress(null)
+    }
+  }, [images, muteAllVideos])
 
   /*
   ============================================================
@@ -2089,6 +1785,11 @@ export default function Home() {
         }
       >
         <Sidebar
+          onExportAllVideos={handleExportAllVideos}
+          videoCount={videoAmount}
+          videoExportBusy={videoExportBusy}
+          batchProgress={batchProgress}
+          exportMessage={exportMessage}
           muteAllVideos={muteAllVideos}
           onMuteAllVideosChange={setMuteAllVideos}
 
