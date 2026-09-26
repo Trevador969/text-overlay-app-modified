@@ -386,3 +386,57 @@
 }
 .exportVideoBtn:hover:not(:disabled) { border-color: #2563eb; background: linear-gradient(135deg, #1e2d47, #1e3a6f); }
 .exportVideoBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Comfortable controls and consistent action hierarchy. */
+.sidebar { width: 320px; min-width: 320px; min-height: 0; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.section { padding: 20px; }
+.sectionHeader { gap: 10px; margin-bottom: 14px; }
+.label { font-size: 11px; letter-spacing: 1.5px; color: var(--text); }
+.empty { padding: 14px 0; color: var(--muted); line-height: 1.6; }
+.controls { gap: 14px; }
+.row { gap: 8px; flex-wrap: nowrap; min-width: 0; }
+.ctrlLabel { min-width: 64px; font-size: 12px; }
+.select { width: 0; min-height: 36px; padding: 7px 9px; border-radius: 8px; }
+.range { min-width: 0; width: 0; height: 22px; }
+.val { min-width: 38px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.toggleGroup { min-width: 0; gap: 5px; }
+.toggleBtn { min-height: 34px; padding: 5px; border-radius: 7px; }
+.toggleOn { background: #ff698018 !important; }
+.colorInput { width: 36px; height: 34px; flex-shrink: 0; border-radius: 7px; }
+.checkbox { width: 16px; height: 16px; }
+.checkLabel { min-height: 32px; gap: 9px; }
+.layerList { gap: 10px; }
+.layerCard { padding: 12px; border-radius: 10px; }
+.layerActive { background: #ff698008; }
+.layerTextarea { padding: 10px; font-size: 13px; line-height: 1.6; border-radius: 7px; }
+.layerBadge { padding: 3px 8px; }
+.layerDel, .audioDel { min-width: 30px; min-height: 30px; color: var(--muted); }
+.addLayerBtn, .resetBtn, .audioChange, .applyAudioBtn { min-height: 30px; padding: 5px 10px; }
+.addLayerBtn { background: #ff698014; border-color: #ff698040; }
+.snapSection { margin-top: 8px; }
+.snapTitle { color: var(--muted); margin-bottom: 10px; }
+.snapGrid, .snapRow { gap: 6px; }
+.snapBtn { min-height: 36px; border-radius: 7px; }
+.exportSection { padding: 20px; gap: 10px; background: var(--surface); }
+.exportBtn, .exportAllBtn, .applyAllBtn, .exportVideoBtn { min-height: 44px; border-radius: 9px; font-size: 12px; }
+.exportBtn { background: var(--accent); color: #241016; }
+.exportVideoBtn { background: #ff698014; border-color: #ff698050; color: var(--accent); }
+.exportVideoBtn:hover:not(:disabled) { background: #ff698022; border-color: var(--accent); }
+.applyAllBtn { background: var(--surface2); border: 1px solid var(--border2); color: var(--text); }
+.audioCard { flex-wrap: wrap; padding: 10px; }
+.audioInfo { min-width: 0; flex: 1 1 100px; }
+.audioUploadBtn { min-height: 42px; }
+.audioHint { font-size: 11px; line-height: 1.6; margin-top: 9px; }
+.sidebar button:disabled { opacity: 0.45; }
+@media (max-width: 1000px) and (min-width: 701px) {
+  .sidebar { width: 290px; min-width: 290px; }
+  .section, .exportSection { padding: 16px; }
+}
+@media (max-width: 700px) {
+  .sidebar { width: 100%; min-width: 0; height: auto; overflow: visible; border-right: none; border-top: 1px solid var(--border); }
+  .section, .exportSection { padding: 20px; }
+  .select, .layerTextarea { font-size: 16px; }
+  .toggleBtn, .snapBtn, .addLayerBtn, .resetBtn, .audioChange, .audioDel, .layerDel, .applyAudioBtn { min-height: 40px; }
+  .exportBtn, .exportVideoBtn, .exportAllBtn, .applyAllBtn { min-height: 48px; }
+  .exportSection { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+}

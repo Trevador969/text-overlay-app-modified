@@ -1,69 +1,18 @@
-.app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 20px;
-  height: 52px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  z-index: 10;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.logoIcon { font-size: 20px; }
-.logoText {
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-  background: linear-gradient(135deg, #ff2d55, #ff6a00);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.headerSub {
-  font-size: 12px;
-  color: var(--muted2);
-  margin-left: auto;
-}
-
-.body {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.canvasArea {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-  overflow: hidden;
-  padding: 24px;
-}
-
-.noSelection {
-  color: var(--muted2);
-  font-size: 14px;
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+.header { display: flex; align-items: center; gap: 24px; padding: 0 28px; min-height: 72px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.logo { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.logoIcon { width: 40px; height: 40px; display: grid; place-items: center; background: #ff698014; border: 1px solid #633640; border-radius: 12px; font-size: 22px; }
+.logoText { font-size: 20px; font-weight: 750; letter-spacing: -0.6px; color: var(--text); }
+.headerSub { font-size: 12px; color: var(--muted); margin-left: auto; text-align: right; }
+.body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.canvasArea { flex: 1; min-height: 0; min-width: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: clamp(20px, 3vw, 48px); background-color: var(--bg); background-image: radial-gradient(#2b2d35 0.8px, transparent 0.8px); background-size: 20px 20px; }
+.noSelection { color: var(--muted); font-size: 14px; text-align: center; }
+@media (max-width: 700px) {
+  .app { height: auto; min-height: 100vh; min-height: 100dvh; overflow: visible; }
+  .header { padding: 16px 18px; flex-wrap: wrap; gap: 10px; }
+  .headerSub { flex-basis: 100%; margin: 0; text-align: left; font-size: 11px; }
+  .body { flex-direction: column; overflow: visible; }
+  .main { order: -1; flex: none; overflow: visible; }
+  .canvasArea { flex: none; height: 440px; height: clamp(320px, 56svh, 560px); padding: 20px; }
 }
