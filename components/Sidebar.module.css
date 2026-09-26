@@ -388,6 +388,12 @@
 .exportVideoBtn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* Comfortable controls and consistent action hierarchy. */
+.audioScope { padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 10px; color: var(--muted); }
+.muteControl { display: flex; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; font-size: 13px; line-height: 1.5; }
+.muteSwitch { appearance: none; width: 40px; height: 24px; flex: 0 0 40px; border: 1px solid var(--border2); border-radius: 20px; background: var(--surface2); cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.muteSwitch::before { content: ''; display: block; width: 16px; height: 16px; margin: 3px; border-radius: 50%; background: var(--muted); transition: transform 0.15s; }
+.muteSwitch:checked { background: var(--accent); border-color: var(--accent); }
+.muteSwitch:checked::before { background: #241016; transform: translateX(16px); }
 .sidebar { width: 320px; min-width: 320px; min-height: 0; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .section { padding: 20px; }
 .sectionHeader { gap: 10px; margin-bottom: 14px; }

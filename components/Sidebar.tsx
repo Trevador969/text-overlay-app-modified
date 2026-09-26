@@ -24,6 +24,9 @@ import {
 import styles from './Sidebar.module.css'
 
 interface Props {
+  muteAllVideos: boolean
+  onMuteAllVideosChange: (muted: boolean) => void
+
   entry:
   | ImageEntry
   | null
@@ -203,6 +206,9 @@ const SNAP_GRID: {
   ]
 
 export default function Sidebar({
+  muteAllVideos,
+  onMuteAllVideosChange,
+
   entry,
 
   onLayerAdd,
@@ -283,6 +289,29 @@ export default function Sidebar({
         styles.sidebar
       }
     >
+      <section className={styles.section} aria-labelledby="video-audio-heading">
+        <div className={styles.sectionHeader}>
+          <h2 id="video-audio-heading" className={styles.label}>Som dos vídeos</h2>
+          <span className={styles.audioScope}>Todos</span>
+        </div>
+        <label className={styles.muteControl}>
+          <input
+            type="checkbox"
+            role="switch"
+            className={styles.muteSwitch}
+            checked={muteAllVideos}
+            onChange={event => onMuteAllVideosChange(event.target.checked)}
+            aria-describedby="mute-videos-hint"
+          />
+          <span>Retirar som de todos os vídeos</span>
+        </label>
+        <p id="mute-videos-hint" className={styles.audioHint} role="status">
+          {muteAllVideos
+            ? 'Ativado: todos os vídeos serão exportados sem som, incluindo áudio extra e novos arquivos.'
+            : 'Ative para exportar todos os vídeos sem áudio original ou adicionado.'}
+        </p>
+      </section>
+
       {/*
       ========================================================
       TEXTOS
@@ -1517,8 +1546,9 @@ export default function Sidebar({
               styles.audioHint
             }
           >
-            Áudio extra aplicado
-            à mídia atual.
+            {muteAllVideos
+              ? 'Áudio extra salvo, mas não será incluído enquanto a opção de retirar som estiver ativada.'
+              : 'Áudio extra aplicado à mídia atual.'}
           </p>
         )}
       </section>

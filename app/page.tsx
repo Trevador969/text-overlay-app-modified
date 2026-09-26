@@ -200,6 +200,8 @@ HOME
 */
 
 export default function Home() {
+  const [muteAllVideos, setMuteAllVideos] = useState(false)
+
   const [
     images,
     setImages,
@@ -1313,32 +1315,16 @@ export default function Home() {
             duration =
               decoded.duration
 
-            const destination =
-              audioContext.createMediaStreamDestination()
+            // Preserve the clip duration even when the added audio is muted.
+            if (!muteAllVideos) {
+              const destination = audioContext.createMediaStreamDestination()
+              const source = audioContext.createBufferSource()
+              source.buffer = decoded
+              source.connect(destination)
+              source.start(0)
 
-            const source =
-              audioContext.createBufferSource()
-
-            source.buffer =
-              decoded
-
-            source.connect(
-              destination
-            )
-
-            source.start(
-              0
-            )
-
-            const audioTrack =
-              destination.stream.getAudioTracks()[0]
-
-            if (
-              audioTrack
-            ) {
-              tracks.push(
-                audioTrack
-              )
+              const audioTrack = destination.stream.getAudioTracks()[0]
+              if (audioTrack) tracks.push(audioTrack)
             }
           } catch (
           error
@@ -1438,7 +1424,7 @@ export default function Home() {
           ) * 1000
         )
       },
-      []
+      [muteAllVideos]
     )
 
   /*
@@ -1482,6 +1468,8 @@ export default function Home() {
 
         video.loop =
           false
+
+        video.muted = muteAllVideos
 
         /*
         ======================================================
@@ -1594,46 +1582,21 @@ export default function Home() {
           null =
           null
 
-        try {
-          audioContext =
-            new AudioContext()
+        // A silent export contains no audio track, rather than a muted track.
+        if (!muteAllVideos) {
+          try {
+            audioContext = new AudioContext()
+            await audioContext.resume()
 
-          await audioContext.resume()
+            const source = audioContext.createMediaElementSource(video)
+            const destination = audioContext.createMediaStreamDestination()
+            source.connect(destination)
 
-          const source =
-            audioContext.createMediaElementSource(
-              video
-            )
-
-          const destination =
-            audioContext.createMediaStreamDestination()
-
-          /*
-          O áudio vai para o recorder,
-          não precisa sair nos alto-falantes.
-          */
-
-          source.connect(
-            destination
-          )
-
-          const audioTrack =
-            destination.stream.getAudioTracks()[0]
-
-          if (
-            audioTrack
-          ) {
-            tracks.push(
-              audioTrack
-            )
+            const audioTrack = destination.stream.getAudioTracks()[0]
+            if (audioTrack) tracks.push(audioTrack)
+          } catch (error) {
+            console.warn('Não foi possível capturar o áudio original:', error)
           }
-        } catch (
-        error
-        ) {
-          console.warn(
-            'Não foi possível capturar o áudio original:',
-            error
-          )
         }
 
         /*
@@ -1842,7 +1805,7 @@ export default function Home() {
 
         await finished
       },
-      []
+      [muteAllVideos]
     )
 
   /*
@@ -2126,6 +2089,9 @@ export default function Home() {
         }
       >
         <Sidebar
+          muteAllVideos={muteAllVideos}
+          onMuteAllVideosChange={setMuteAllVideos}
+
           entry={
             activeEntry
           }
