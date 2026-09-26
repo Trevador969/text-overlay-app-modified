@@ -25,9 +25,10 @@ import styles from './Sidebar.module.css'
 
 interface Props {
   onExportAllVideos: () => void
+  onExportEverything: () => void
   videoCount: number
   videoExportBusy: boolean
-  batchProgress: { current: number; total: number; name: string } | null
+  batchProgress: { current: number; total: number; name: string; scope: 'videos' | 'all' } | null
   exportMessage: string
   muteAllVideos: boolean
   onMuteAllVideosChange: (muted: boolean) => void
@@ -212,6 +213,7 @@ const SNAP_GRID: {
 
 export default function Sidebar({
   onExportAllVideos,
+  onExportEverything,
   videoCount,
   videoExportBusy,
   batchProgress,
@@ -1640,10 +1642,24 @@ export default function Sidebar({
         <button
           type="button"
           className={styles.exportVideosBtn}
+          onClick={onExportEverything}
+          disabled={!imageCount || videoExportBusy}
+        >
+          {batchProgress?.scope === 'all'
+            ? `Preparando ZIP: ${batchProgress.current} de ${batchProgress.total}…`
+            : `⬇ Baixar tudo em ZIP (${imageCount})`}
+        </button>
+        <p className={styles.exportHint}>
+          Todas as imagens em PNG e vídeos em WebM, com as edições aplicadas, em um único ZIP.
+        </p>
+
+        <button
+          type="button"
+          className={styles.exportAllBtn}
           onClick={onExportAllVideos}
           disabled={!videoCount || videoExportBusy}
         >
-          {batchProgress
+          {batchProgress?.scope === 'videos'
             ? `Exportando ${batchProgress.current} de ${batchProgress.total}…`
             : `⬇ Baixar todos os vídeos editados (${videoCount})`}
         </button>
@@ -1654,7 +1670,7 @@ export default function Sidebar({
           <div className={styles.exportProgress} role="status" aria-live="polite">
             <span className={styles.exportFilename}>{batchProgress.name}</span>
             <progress
-              aria-label="Progresso da exportação dos vídeos"
+              aria-label="Progresso da exportação dos arquivos"
               value={batchProgress.current}
               max={batchProgress.total}
             />

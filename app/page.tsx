@@ -21,6 +21,7 @@ import {
 
 import {
   exportCanvas,
+  renderToCanvas,
   buildFilter,
   drawLayer,
 } from '@/lib/canvas'
@@ -205,7 +206,7 @@ export default function Home() {
   const [muteAllVideos, setMuteAllVideos] = useState(false)
   const videoExportLock = useRef(false)
   const [videoExportBusy, setVideoExportBusy] = useState(false)
-  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; name: string } | null>(null)
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; name: string; scope: 'videos' | 'all' } | null>(null)
   const [exportMessage, setExportMessage] = useState('')
 
   const [
@@ -1502,14 +1503,16 @@ export default function Home() {
       ]
     )
 
-  const handleExportAllVideos = useCallback(async () => {
-    const videos = images.filter(entry => entry.mediaType === 'video')
-    if (!videos.length || videoExportLock.current) return
+  const handleExportArchive = useCallback(async (scope: 'videos' | 'all') => {
+    const entries = scope === 'all' ? images : images.filter(entry => entry.mediaType === 'video')
+    if (!entries.length || videoExportLock.current) return
+    const archiveName = scope === 'all' ? 'arquivos_editados.zip' : 'videos_editados.zip'
+    const itemName = scope === 'all' ? 'arquivo' : 'vídeo'
 
     videoExportLock.current = true
     setVideoExportBusy(true)
     setExportMessage('')
-    setBatchProgress({ current: 0, total: videos.length, name: 'Preparando os vídeos…' })
+    setBatchProgress({ current: 0, total: entries.length, name: 'Preparando os arquivos…', scope })
     try {
       const { default: JSZip } = await import('jszip')
       const archive = new JSZip()
@@ -1517,13 +1520,27 @@ export default function Home() {
       let completed = 0
 
       // React updates entries immutably, so this batch keeps the edits from the click.
-      for (let index = 0; index < videos.length; index++) {
-        const entry = videos[index]
-        setBatchProgress({ current: index + 1, total: videos.length, name: entry.name })
+      for (let index = 0; index < entries.length; index++) {
+        const entry = entries[index]
+        setBatchProgress({ current: index + 1, total: entries.length, name: entry.name, scope })
         try {
-          const blob = await exportEditedVideo(entry, muteAllVideos)
-          const safeName = removeExtension(entry.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || 'video'
-          const filename = `${String(index + 1).padStart(3, '0')}_editado_${safeName}.webm`
+          let blob: Blob
+          if (entry.mediaType === 'video') {
+            blob = await exportEditedVideo(entry, muteAllVideos)
+          } else {
+            const media = mediaElements.get(entry.id)
+            if (!(media instanceof HTMLImageElement)) throw new Error('Imagem indisponível para exportação.')
+            const canvas = document.createElement('canvas')
+            renderToCanvas(canvas, media, entry.layers, entry.adjust)
+            blob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob(result => result
+                ? resolve(result)
+                : reject(new Error('Não foi possível exportar a imagem.')), 'image/png')
+            })
+          }
+          const safeName = removeExtension(entry.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') || 'arquivo'
+          const extension = entry.mediaType === 'video' ? 'webm' : 'png'
+          const filename = `${String(index + 1).padStart(3, '0')}_editado_${safeName}.${extension}`
           archive.file(filename, blob)
           completed++
         } catch (error) {
@@ -1533,15 +1550,15 @@ export default function Home() {
       }
 
       if (completed) {
-        setBatchProgress({ current: videos.length, total: videos.length, name: 'Preparando o arquivo ZIP…' })
+        setBatchProgress({ current: entries.length, total: entries.length, name: 'Preparando o arquivo ZIP…', scope })
         const zip = await archive.generateAsync({ type: 'blob', compression: 'STORE' })
-        downloadBlob(zip, 'videos_editados.zip')
+        downloadBlob(zip, archiveName)
       }
       setExportMessage(failures.length
-        ? `${completed} de ${videos.length} vídeos exportados. Falha em: ${failures.join(', ')}.`
-        : `${completed} vídeo${completed === 1 ? '' : 's'} editado${completed === 1 ? '' : 's'} no arquivo videos_editados.zip.`)
+        ? `${completed} de ${entries.length} ${itemName}s exportados. Falha em: ${failures.join(', ')}.`
+        : `${completed} ${itemName}${completed === 1 ? '' : 's'} editado${completed === 1 ? '' : 's'} no arquivo ${archiveName}.`)
     } catch (error) {
-      console.error('Erro ao baixar todos os vídeos:', error)
+      console.error('Erro ao preparar o ZIP:', error)
       setExportMessage('Não foi possível preparar o download. Tente novamente.')
     } finally {
       videoExportLock.current = false
@@ -1785,7 +1802,8 @@ export default function Home() {
         }
       >
         <Sidebar
-          onExportAllVideos={handleExportAllVideos}
+          onExportAllVideos={() => void handleExportArchive('videos')}
+          onExportEverything={() => void handleExportArchive('all')}
           videoCount={videoAmount}
           videoExportBusy={videoExportBusy}
           batchProgress={batchProgress}
